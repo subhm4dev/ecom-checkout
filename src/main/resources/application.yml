@@ -1,0 +1,19 @@
+spring:
+  application:
+    name: checkout-service
+  config:
+    import: optional:configserver:http://localhost:8888
+  cloud:
+    config:
+      fail-fast: false
+  kafka:
+    bootstrap-servers: localhost:9092
+
+server:
+  port: 8088
+
+logging:
+  level:
+    root: INFO
+    com.ecom: DEBUG
+

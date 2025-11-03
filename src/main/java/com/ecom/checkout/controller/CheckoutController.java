@@ -37,7 +37,7 @@ import java.util.UUID;
  * eventual consistency across services while maintaining performance and scalability.
  */
 @RestController
-@RequestMapping("/v1/checkout")
+@RequestMapping("/api/v1/checkout")
 @Tag(name = "Checkout", description = "Checkout orchestration and order creation endpoints")
 @SecurityRequirement(name = "bearerAuth")
 public class CheckoutController {

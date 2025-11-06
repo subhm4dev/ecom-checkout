@@ -1,3 +1,4 @@
+# Spring Cloud Config Client configuration
 spring:
   application:
     name: checkout-service
@@ -6,9 +7,70 @@ spring:
   cloud:
     config:
       fail-fast: false
+  # Local fallback configuration
+  # Kafka for event publishing
   kafka:
-    bootstrap-servers: localhost:9092
+    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.springframework.kafka.support.serializer.JsonSerializer
+  # Redis for temporary checkout state
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
 
+# JWT Configuration
+jwt:
+  enabled: true
+  identity-service-url: ${IDENTITY_SERVICE_URL:http://localhost:8081}
+  jwks-endpoint: /.well-known/jwks.json
+  jwks-cache-refresh-interval-ms: ${JWKS_CACHE_REFRESH_INTERVAL_MS:300000}  # 5 minutes
+
+# HTTP Client Configuration (ResilientWebClient)
+http-client:
+  default-timeout: PT5S  # 5 seconds
+  connect-timeout: PT2S  # 2 seconds
+  read-timeout: PT5S     # 5 seconds
+  write-timeout: PT5S    # 5 seconds
+  response-timeout: PT10S # 10 seconds
+  circuit-breaker:
+    enabled: true
+    failure-rate-threshold: 50.0  # Open circuit when 50% requests fail
+    wait-duration-in-open-state: PT60S  # Wait 60s before trying again
+    ring-buffer-size-in-closed-state: 100
+    ring-buffer-size-in-half-open-state: 10
+  retry:
+    enabled: true
+    max-attempts: 3
+    wait-duration: PT1S  # Wait 1 second between retries
+  rate-limiter:
+    enabled: true
+    limit-for-period: 100  # Max 100 requests
+    limit-refresh-period: PT1M  # Per minute
+    timeout-duration: PT5S  # Wait max 5s for permission
+  # Service-specific configurations
+  services:
+    identity-service:
+      timeout: PT10S  # Longer timeout for identity service
+      circuit-breaker:
+        failure-rate-threshold: 30.0  # More sensitive for identity service
+    cart-service:
+      timeout: PT5S
+    catalog-service:
+      timeout: PT5S
+    inventory-service:
+      timeout: PT5S
+    promo-service:
+      timeout: PT5S
+    payment-service:
+      timeout: PT10S  # Longer timeout for payment processing
+    order-service:
+      timeout: PT5S
+    address-service:
+      timeout: PT5S
+
+# Local fallback configuration if Config Server is unavailable
 server:
   port: 8088
 

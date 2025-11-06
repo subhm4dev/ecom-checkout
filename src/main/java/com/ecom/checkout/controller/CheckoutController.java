@@ -1,11 +1,25 @@
 package com.ecom.checkout.controller;
 
+import com.ecom.checkout.model.request.AddressValidationRequest;
+import com.ecom.checkout.model.request.CheckoutRequest;
+import com.ecom.checkout.model.request.ShippingCalculationRequest;
+import com.ecom.checkout.model.response.AddressValidationResponse;
+import com.ecom.checkout.model.response.CheckoutCompleteResponse;
+import com.ecom.checkout.model.response.CheckoutSummaryResponse;
+import com.ecom.checkout.model.response.ShippingCalculationResponse;
+import com.ecom.checkout.security.JwtAuthenticationToken;
+import com.ecom.checkout.service.CheckoutService;
+import com.ecom.response.dto.ApiResponse;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.UUID;
@@ -40,7 +54,11 @@ import java.util.UUID;
 @RequestMapping("/api/v1/checkout")
 @Tag(name = "Checkout", description = "Checkout orchestration and order creation endpoints")
 @SecurityRequirement(name = "bearerAuth")
+@RequiredArgsConstructor
+@Slf4j
 public class CheckoutController {
+    
+    private final CheckoutService checkoutService;
 
     /**
      * Initiate checkout
@@ -58,6 +76,7 @@ public class CheckoutController {
      * </ul>
      * 
      * <p>This endpoint is protected and requires authentication.
+     * RBAC: CUSTOMER role required.
      */
     @PostMapping("/initiate")
     @Operation(
@@ -65,21 +84,18 @@ public class CheckoutController {
         description = "Validates cart, calculates final prices, and prepares order summary for review"
     )
     @SecurityRequirement(name = "bearerAuth")
-    public ResponseEntity<Object> initiateCheckout(@Valid @RequestBody Object checkoutRequest) {
-        // TODO: Implement checkout initiation logic
-        // 1. Extract userId from X-User-Id header
-        // 2. Extract tenantId from X-Tenant-Id header
-        // 3. Validate checkoutRequest DTO (shippingAddressId, paymentMethodId if provided)
-        // 4. Get cart from Cart service
-        // 5. Validate cart is not empty
-        // 6. Fetch current product details and prices from Catalog service
-        // 7. Calculate final prices with promotions from Promotion service
-        // 8. Validate inventory availability from Inventory service
-        // 9. Validate shipping address from Address Book service
-        // 10. Calculate shipping cost based on address
-        // 11. Calculate tax (if applicable)
-        // 12. Return checkout summary (items, totals, shipping, tax, final total)
-        return ResponseEntity.ok(null);
+    @PreAuthorize("hasRole('CUSTOMER')")
+    public ResponseEntity<ApiResponse<CheckoutSummaryResponse>> initiateCheckout(
+            @Valid @RequestBody CheckoutRequest checkoutRequest,
+            Authentication authentication) {
+        
+        log.info("Initiating checkout: shippingAddressId={}", checkoutRequest.shippingAddressId());
+        
+        UUID userId = getUserIdFromAuthentication(authentication);
+        UUID tenantId = getTenantIdFromAuthentication(authentication);
+        
+        CheckoutSummaryResponse response = checkoutService.initiateCheckout(userId, tenantId, checkoutRequest);
+        return ResponseEntity.ok(ApiResponse.success(response, "Checkout initiated successfully"));
     }
 
     /**
@@ -101,6 +117,7 @@ public class CheckoutController {
      * </ul>
      * 
      * <p>This endpoint is protected and requires authentication.
+     * RBAC: CUSTOMER role required.
      */
     @PostMapping("/complete")
     @Operation(
@@ -108,44 +125,19 @@ public class CheckoutController {
         description = "Orchestrates inventory reservation, payment processing, and order creation. Implements saga pattern for transaction management."
     )
     @SecurityRequirement(name = "bearerAuth")
-    public ResponseEntity<Object> completeCheckout(@Valid @RequestBody Object checkoutRequest) {
-        // TODO: Implement checkout completion logic (Saga pattern)
-        // Step 1: Validate and prepare
-        // 1. Extract userId from X-User-Id header
-        // 2. Extract tenantId from X-Tenant-Id header
-        // 3. Validate checkoutRequest DTO (shippingAddressId, paymentMethodId, cartId)
-        // 4. Get cart from Cart service
-        // 5. Validate cart is not empty
+    @PreAuthorize("hasRole('CUSTOMER')")
+    public ResponseEntity<ApiResponse<CheckoutCompleteResponse>> completeCheckout(
+            @Valid @RequestBody CheckoutRequest checkoutRequest,
+            Authentication authentication) {
         
-        // Step 2: Reserve inventory
-        // 6. Call Inventory service to reserve inventory for all cart items
-        // 7. If reservation fails, return error (INSUFFICIENT_STOCK)
-        // 8. Store reservationId for potential rollback
+        log.info("Completing checkout: shippingAddressId={}", checkoutRequest.shippingAddressId());
         
-        // Step 3: Process payment
-        // 9. Calculate final order total (items + shipping + tax - discounts)
-        // 10. Call Payment service to process payment
-        // 11. If payment fails, release inventory reservation and return error
-        // 12. Store paymentId for potential refund
+        UUID userId = getUserIdFromAuthentication(authentication);
+        UUID tenantId = getTenantIdFromAuthentication(authentication);
         
-        // Step 4: Create order
-        // 13. Call Order service to create order with:
-        //     - Cart items (product details, quantities, prices)
-        //     - Shipping address
-        //     - Payment information
-        //     - Totals
-        // 14. If order creation fails:
-        //     - Refund payment via Payment service
-        //     - Release inventory reservation
-        //     - Return error
-        
-        // Step 5: Finalize
-        // 15. Clear cart from Cart service
-        // 16. Publish OrderCreated event to Kafka
-        // 17. Return order confirmation with orderId
-        
-        // Error handling: Implement compensation actions for each step
-        return ResponseEntity.status(HttpStatus.CREATED).body(null);
+        CheckoutCompleteResponse response = checkoutService.completeCheckout(userId, tenantId, checkoutRequest);
+        return ResponseEntity.status(HttpStatus.CREATED)
+            .body(ApiResponse.success(response, "Checkout completed successfully"));
     }
 
     /**
@@ -156,6 +148,7 @@ public class CheckoutController {
      * session expires.
      * 
      * <p>This endpoint is protected and requires authentication.
+     * RBAC: CUSTOMER role required.
      */
     @PostMapping("/cancel")
     @Operation(
@@ -163,12 +156,17 @@ public class CheckoutController {
         description = "Cancels in-progress checkout and releases reserved inventory"
     )
     @SecurityRequirement(name = "bearerAuth")
-    public ResponseEntity<Void> cancelCheckout(@RequestParam(required = false) UUID reservationId) {
-        // TODO: Implement checkout cancellation logic
-        // 1. Extract userId from X-User-Id header
-        // 2. If reservationId provided, release inventory reservation via Inventory service
-        // 3. Clean up any temporary checkout state
-        // 4. Return 204 No Content
+    @PreAuthorize("hasRole('CUSTOMER')")
+    public ResponseEntity<Void> cancelCheckout(
+            @RequestParam(required = false) UUID reservationId,
+            Authentication authentication) {
+        
+        log.info("Cancelling checkout: reservationId={}", reservationId);
+        
+        UUID userId = getUserIdFromAuthentication(authentication);
+        UUID tenantId = getTenantIdFromAuthentication(authentication);
+        
+        checkoutService.cancelCheckout(userId, tenantId, reservationId);
         return ResponseEntity.status(HttpStatus.NO_CONTENT).build();
     }
 
@@ -179,6 +177,7 @@ public class CheckoutController {
      * with address validation services to ensure accurate delivery information.
      * 
      * <p>This endpoint is protected and requires authentication.
+     * RBAC: CUSTOMER role required.
      */
     @PostMapping("/address/validate")
     @Operation(
@@ -186,13 +185,18 @@ public class CheckoutController {
         description = "Validates shipping address for deliverability and accuracy"
     )
     @SecurityRequirement(name = "bearerAuth")
-    public ResponseEntity<Object> validateAddress(@Valid @RequestBody Object addressRequest) {
-        // TODO: Implement address validation logic
-        // 1. Extract userId from X-User-Id header
-        // 2. Validate addressRequest DTO (address fields)
-        // 3. Optionally: Call address validation service (e.g., Google Maps, SmartyStreets)
-        // 4. Return validation result (valid, suggested corrections if invalid)
-        return ResponseEntity.ok(null);
+    @PreAuthorize("hasRole('CUSTOMER')")
+    public ResponseEntity<ApiResponse<AddressValidationResponse>> validateAddress(
+            @Valid @RequestBody AddressValidationRequest addressRequest,
+            Authentication authentication) {
+        
+        log.info("Validating address");
+        
+        UUID userId = getUserIdFromAuthentication(authentication);
+        UUID tenantId = getTenantIdFromAuthentication(authentication);
+        
+        AddressValidationResponse response = checkoutService.validateAddress(userId, tenantId, addressRequest);
+        return ResponseEntity.ok(ApiResponse.success(response, "Address validated successfully"));
     }
 
     /**
@@ -202,6 +206,7 @@ public class CheckoutController {
      * shipping method. Used to display shipping options and total cost during checkout.
      * 
      * <p>This endpoint is protected and requires authentication.
+     * RBAC: CUSTOMER role required.
      */
     @PostMapping("/shipping/calculate")
     @Operation(
@@ -209,17 +214,39 @@ public class CheckoutController {
         description = "Calculates shipping cost based on cart contents, address, and shipping method"
     )
     @SecurityRequirement(name = "bearerAuth")
-    public ResponseEntity<Object> calculateShipping(@Valid @RequestBody Object shippingRequest) {
-        // TODO: Implement shipping cost calculation logic
-        // 1. Extract userId from X-User-Id header
-        // 2. Validate shippingRequest DTO (addressId or address details, shippingMethod)
-        // 3. Get cart from Cart service to calculate weight/dimensions
-        // 4. Calculate shipping cost based on:
-        //     - Shipping address (distance, zone)
-        //     - Cart weight and dimensions
-        //     - Shipping method (standard, express, etc.)
-        // 5. Return shipping options with costs
-        return ResponseEntity.ok(null);
+    @PreAuthorize("hasRole('CUSTOMER')")
+    public ResponseEntity<ApiResponse<ShippingCalculationResponse>> calculateShipping(
+            @Valid @RequestBody ShippingCalculationRequest shippingRequest,
+            Authentication authentication) {
+        
+        log.info("Calculating shipping: addressId={}, method={}", 
+            shippingRequest.addressId(), shippingRequest.shippingMethod());
+        
+        UUID userId = getUserIdFromAuthentication(authentication);
+        UUID tenantId = getTenantIdFromAuthentication(authentication);
+        
+        ShippingCalculationResponse response = checkoutService.calculateShipping(userId, tenantId, shippingRequest);
+        return ResponseEntity.ok(ApiResponse.success(response, "Shipping calculated successfully"));
+    }
+    
+    /**
+     * Extract user ID from JWT authentication token
+     */
+    private UUID getUserIdFromAuthentication(Authentication authentication) {
+        if (authentication instanceof JwtAuthenticationToken jwtToken) {
+            return UUID.fromString(jwtToken.getUserId());
+        }
+        throw new IllegalStateException("Invalid authentication token");
+    }
+    
+    /**
+     * Extract tenant ID from JWT authentication token
+     */
+    private UUID getTenantIdFromAuthentication(Authentication authentication) {
+        if (authentication instanceof JwtAuthenticationToken jwtToken) {
+            return UUID.fromString(jwtToken.getTenantId());
+        }
+        throw new IllegalStateException("Invalid authentication token");
     }
 }
 

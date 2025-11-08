@@ -64,7 +64,7 @@ http-client:
     promo-service:
       timeout: PT5S
     payment-service:
-      timeout: PT10S  # Longer timeout for payment processing
+      timeout: PT30S  # Longer timeout for payment processing (Razorpay API calls can be slow)
     order-service:
       timeout: PT5S
     address-service:

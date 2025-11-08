@@ -23,7 +23,7 @@ public interface CheckoutService {
     /**
      * Complete checkout and create order (Saga pattern)
      */
-    CheckoutCompleteResponse completeCheckout(UUID userId, UUID tenantId, CheckoutRequest request);
+    CheckoutCompleteResponse completeCheckout(UUID userId, UUID tenantId, CheckoutRequest request, String jwtToken);
     
     /**
      * Cancel checkout and release resources

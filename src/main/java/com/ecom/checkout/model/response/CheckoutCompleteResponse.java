@@ -17,6 +17,12 @@ public record CheckoutCompleteResponse(
     UUID orderId,
     
     /**
+     * Order number (human-readable)
+     */
+    @JsonProperty("order_number")
+    String orderNumber,
+    
+    /**
      * Payment ID
      */
     @JsonProperty("payment_id")

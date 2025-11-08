@@ -128,14 +128,28 @@ public class CheckoutController {
     @PreAuthorize("hasRole('CUSTOMER')")
     public ResponseEntity<ApiResponse<CheckoutCompleteResponse>> completeCheckout(
             @Valid @RequestBody CheckoutRequest checkoutRequest,
-            Authentication authentication) {
+            Authentication authentication,
+            @RequestHeader(value = "Authorization", required = false) String authorizationHeader) {
         
         log.info("Completing checkout: shippingAddressId={}", checkoutRequest.shippingAddressId());
         
         UUID userId = getUserIdFromAuthentication(authentication);
         UUID tenantId = getTenantIdFromAuthentication(authentication);
         
-        CheckoutCompleteResponse response = checkoutService.completeCheckout(userId, tenantId, checkoutRequest);
+        // Extract token from Authorization header or Authentication object
+        String token = null;
+        if (authorizationHeader != null && authorizationHeader.startsWith("Bearer ")) {
+            token = authorizationHeader.substring(7);
+        } else if (authentication instanceof JwtAuthenticationToken jwtToken) {
+            token = jwtToken.getToken();
+        }
+        
+        if (token == null) {
+            log.error("JWT token not found in request headers or authentication");
+            throw new IllegalStateException("JWT token not available");
+        }
+        
+        CheckoutCompleteResponse response = checkoutService.completeCheckout(userId, tenantId, checkoutRequest, token);
         return ResponseEntity.status(HttpStatus.CREATED)
             .body(ApiResponse.success(response, "Checkout completed successfully"));
     }
